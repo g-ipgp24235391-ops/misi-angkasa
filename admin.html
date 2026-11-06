@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Misi Angkasa - Papan Pemuka Guru</title>
+<script src="config.js"></script>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#17163F;color:#F4F7FF}
+main{max-width:1300px;margin:auto;padding:16px}h1{margin:.2em 0}
+input,button,select{font:inherit;padding:8px 12px;border-radius:10px;border:2px solid #6B8ED6}
+button{background:#F8E9B7;color:#3F5FB0;font-weight:700;cursor:pointer}button.del{background:#ffd6dc;color:#a3283d;padding:2px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center}.wrap{overflow:auto;border-radius:12px}
+table{border-collapse:collapse;width:100%;background:#fff;color:#1A2347}
+th,td{padding:6px 8px;border-bottom:1px solid #ddd;text-align:left;font-size:14px;white-space:nowrap}th{background:#6B8ED6;color:#fff;position:sticky;top:0}
+.ok{color:#1b8a4b;font-weight:700}.no{color:#c2354a}a{color:#3F5FB0;font-weight:700}#msg{min-height:1.4em}
+</style></head><body><main>
+<h1>Papan Pemuka Guru - Misi Angkasa</h1>
+<div id="lg"><div class="row"><input id="em" type="email" placeholder="E-mel guru" autocomplete="username"><input id="pw" type="password" placeholder="Kata laluan" autocomplete="current-password"><button id="go">Log masuk</button></div></div>
+<p id="msg"></p>
+<div id="dash" hidden>
+ <div class="row"><label>Kelas: <select id="kls"><option value="">Semua</option></select></label><button id="rf">Muat semula</button><button id="csv">Muat turun CSV</button><button id="out">Log keluar</button><span id="cnt"></span></div>
+ <div class="wrap"><table id="tb"></table></div>
+</div>
+<script type="module">
+const $=s=>document.querySelector(s),C=window.APP_CONFIG&&window.APP_CONFIG.firebase,msg=t=>{$('#msg').textContent=t};
+if(!C||!C.apiKey){msg('config.js belum diisi.')}
+else{
+ const B='https://www.gstatic.com/firebasejs/10.12.2/';
+ const [{initializeApp},{getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged},{getFirestore,collection,getDocs,doc,getDoc,deleteDoc}]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-auth.js'),import(B+'firebase-firestore.js')]);
+ const app=initializeApp(C),auth=getAuth(app),db=getFirestore(app);
+ const TPM=[null,null,'p1c','p4a','p4a','p4b'];let rows=[];
+ const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ const cnt=(P,ids)=>ids.filter(k=>P[k]).length;
+ async function load(){
+  msg('Memuatkan data...');
+  const ps=await getDocs(collection(db,'players'));rows=[];
+  ps.forEach(d=>{const p=d.data(),P=p.P||{},Q=p.QR||null;
+   rows.push({pid:d.id,nama:p.nama||'',kelas:p.kelas||'',a:cnt(P,['p1a','p1b','p1c']),b:cnt(P,['p2a','p2b','p2c']),c:cnt(P,['p3b','p3c','p3d']),d:cnt(P,['p4a','p4b']),e:cnt(P,['p5a']),mata:p.mata||0,
+    kuiz:Q?Q.sc+'/'+Q.n:'-',tp:[1,2,3,4,5,6].map(i=>{const x=Q&&Q.tp&&Q.tp[i],m=TPM[i-1];return !!(x&&x[1]&&x[0]/x[1]>=.5&&(!m||P[m]))}),
+    video:(p.video&&p.video.url)||'',masa:p.updatedAt&&p.updatedAt.toDate?p.updatedAt.toDate().toLocaleString('ms-MY'):''})});
+  rows.sort((x,y)=>(x.kelas+x.nama).localeCompare(y.kelas+y.nama));
+  const ks=[...new Set(rows.map(r=>r.kelas).filter(Boolean))];$('#kls').innerHTML='<option value="">Semua</option>'+ks.map(k=>`<option>${esc(k)}</option>`).join('');
+  msg('');render()}
+ function view(){const k=$('#kls').value;return rows.filter(r=>!k||r.kelas==k)}
+ function render(){const v=view();$('#cnt').textContent=v.length+' murid';
+  $('#tb').innerHTML='<tr><th>Nama</th><th>Kelas</th><th>Algoritma /3</th><th>Pseudokod /3</th><th>Carta Alir /3</th><th>Cabaran /2</th><th>Misi Akhir /1</th><th>Kuiz</th><th>Markah</th><th>TP1</th><th>TP2</th><th>TP3</th><th>TP4</th><th>TP5</th><th>TP6</th><th>Video</th><th>Dikemas kini</th><th></th></tr>'+
+  v.map(r=>`<tr><td>${esc(r.nama)}</td><td>${esc(r.kelas)}</td><td>${r.a}</td><td>${r.b}</td><td>${r.c}</td><td>${r.d}</td><td>${r.e}</td><td>${esc(r.kuiz)}</td><td>${r.mata}</td>${r.tp.map(t=>`<td class="${t?'ok':'no'}">${t?'✓':'✗'}</td>`).join('')}<td>${/^https:\/\//.test(r.video)?`<a href="${esc(r.video)}" target="_blank" rel="noopener">Tonton</a>`:'-'}</td><td>${esc(r.masa)}</td><td><button class="del" data-id="${esc(r.pid)}" title="Padam rekod ini">Padam</button></td></tr>`).join('')}
+ $('#tb').onclick=async e=>{const b=e.target.closest('.del');if(!b)return;if(!confirm('Padam rekod murid ini daripada sistem (termasuk papan markah)?'))return;try{await deleteDoc(doc(db,'board',b.dataset.id));await deleteDoc(doc(db,'players',b.dataset.id));await load()}catch(x){msg('Gagal memadam: '+x.message)}};
+ $('#kls').onchange=render;$('#rf').onclick=load;
+ $('#csv').onclick=()=>{const h=['Nama','Kelas','Algoritma','Pseudokod','CartaAlir','Cabaran','MisiAkhir','Kuiz','Markah','TP1','TP2','TP3','TP4','TP5','TP6','Video','Dikemaskini'],q=x=>'"'+String(x).replace(/"/g,'""')+'"';
+  const t=[h.join(',')].concat(view().map(r=>[r.nama,r.kelas,r.a,r.b,r.c,r.d,r.e,r.kuiz,r.mata,...r.tp.map(x=>x?'Dicapai':'Perlu latihan'),r.video,r.masa].map(q).join(','))).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv'}));a.download='misi-angkasa-rekod.csv';a.click()};
+ async function enter(){try{const u=auth.currentUser;if(!u||u.isAnonymous){return}const t=await getDoc(doc(db,'teachers',u.uid));if(!t.exists()){await signOut(auth);msg('Akaun ini bukan akaun guru.');return}$('#lg').hidden=true;$('#dash').hidden=false;await load()}catch(e){msg('Ralat: '+e.message)}}
+ $('#go').onclick=async()=>{try{msg('Sedang log masuk...');await signInWithEmailAndPassword(auth,$('#em').value.trim(),$('#pw').value);await enter()}catch(e){msg('E-mel atau kata laluan salah.')}};
+ $('#out').onclick=async()=>{await signOut(auth);location.reload()};
+ onAuthStateChanged(auth,u=>{if(u&&!u.isAnonymous&&$('#dash').hidden)enter()});
+}
+</script></main></body></html>
